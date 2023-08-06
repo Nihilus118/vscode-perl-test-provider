@@ -1,12 +1,12 @@
 import { TextDecoder } from 'util';
 import * as vscode from 'vscode';
-import { parseMarkdown } from './parser';
+import { parsePerl as parsePerl } from './parser';
 
 const textDecoder = new TextDecoder('utf-8');
 
-export type MarkdownTestData = TestFile | TestHeading | TestCase;
+export type PerlTestData = TestFile | TestHeading ;
 
-export const testData = new WeakMap<vscode.TestItem, MarkdownTestData>();
+export const testData = new WeakMap<vscode.TestItem, PerlTestData>();
 
 let generationCounter = 0;
 
@@ -49,19 +49,7 @@ export class TestFile {
 			}
 		};
 
-		parseMarkdown(content, {
-			onTest: (range, a, operator, b, expected) => {
-				const parent = ancestors[ancestors.length - 1];
-				const data = new TestCase(a, operator as Operator, b, expected, thisGeneration);
-				const id = `${item.uri}/${data.getLabel()}`;
-
-
-				const tcase = controller.createTestItem(id, data.getLabel(), item.uri);
-				testData.set(tcase, data);
-				tcase.range = range;
-				parent.children.push(tcase);
-			},
-
+		parsePerl(content, {
 			onHeading: (range, name, depth) => {
 				ascend(depth);
 				const parent = ancestors[ancestors.length - 1];
@@ -81,48 +69,4 @@ export class TestFile {
 
 export class TestHeading {
 	constructor(public generation: number) { }
-}
-
-type Operator = '+' | '-' | '*' | '/';
-
-export class TestCase {
-	constructor(
-		private readonly a: number,
-		private readonly operator: Operator,
-		private readonly b: number,
-		private readonly expected: number,
-		public generation: number
-	) { }
-
-	getLabel() {
-		return `${this.a} ${this.operator} ${this.b} = ${this.expected}`;
-	}
-
-	async run(item: vscode.TestItem, options: vscode.TestRun): Promise<void> {
-		const start = Date.now();
-		await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-		const actual = this.evaluate();
-		const duration = Date.now() - start;
-
-		if (actual === this.expected) {
-			options.passed(item, duration);
-		} else {
-			const message = vscode.TestMessage.diff(`Expected ${item.label}`, String(this.expected), String(actual));
-			message.location = new vscode.Location(item.uri!, item.range!);
-			options.failed(item, message, duration);
-		}
-	}
-
-	private evaluate() {
-		switch (this.operator) {
-			case '-':
-				return this.a - this.b;
-			case '+':
-				return this.a + this.b;
-			case '/':
-				return Math.floor(this.a / this.b);
-			case '*':
-				return this.a * this.b;
-		}
-	}
 }

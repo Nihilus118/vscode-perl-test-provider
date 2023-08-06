@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getContentFromFilesystem, MarkdownTestData, TestCase, testData, TestFile } from './testTree';
+import { getContentFromFilesystem, testData, TestFile } from './testTree';
 
 export async function activate(context: vscode.ExtensionContext) {
 	const ctrl = vscode.tests.createTestController('mathTestController', 'Markdown Math');
@@ -22,8 +22,23 @@ export async function activate(context: vscode.ExtensionContext) {
 		cancellation.onCancellationRequested(() => l.dispose());
 	};
 
+	const debugHandler = (request: vscode.TestRunRequest2, cancellation: vscode.CancellationToken) => {
+		if (!request.continuous) {
+			return startTestRun(request);
+		}
+
+		const l = fileChangedEmitter.event(uri => startTestRun(
+			new vscode.TestRunRequest2(
+				[getOrCreateFile(ctrl, uri).file],
+				undefined,
+				request.profile,
+				true
+			),
+		));
+		cancellation.onCancellationRequested(() => l.dispose());
+	};
+
 	const startTestRun = (request: vscode.TestRunRequest) => {
-		const queue: { test: vscode.TestItem; data: TestCase }[] = [];
 		const run = ctrl.createTestRun(request);
 		// map of file uris to statements on each line:
 		const coveredLines = new Map</* file uri */ string, (vscode.StatementCoverage | undefined)[]>();
@@ -35,16 +50,11 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 
 				const data = testData.get(test);
-				if (data instanceof TestCase) {
-					run.enqueued(test);
-					queue.push({ test, data });
-				} else {
-					if (data instanceof TestFile && !data.didResolve) {
-						await data.updateFromDisk(ctrl, test);
-					}
-
-					await discoverTests(gatherTestItems(test.children));
+				if (data instanceof TestFile && !data.didResolve) {
+					await data.updateFromDisk(ctrl, test);
 				}
+
+				await discoverTests(gatherTestItems(test.children));
 
 				if (test.uri && !coveredLines.has(test.uri.toString())) {
 					try {
@@ -62,28 +72,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 		};
 
-		const runTestQueue = async () => {
-			for (const { test, data } of queue) {
-				run.appendOutput(`Running ${test.id}\r\n`);
-				if (run.token.isCancellationRequested) {
-					run.skipped(test);
-				} else {
-					run.started(test);
-					await data.run(test, run);
-				}
-
-				const lineNo = test.range!.start.line;
-				const fileCoverage = coveredLines.get(test.uri!.toString());
-				if (fileCoverage) {
-					fileCoverage[lineNo]!.executionCount++;
-				}
-
-				run.appendOutput(`Completed ${test.id}\r\n`);
-			}
-
-			run.end();
-		};
-
 		run.coverageProvider = {
 			provideFileCoverage() {
 				const coverage: vscode.FileCoverage[] = [];
@@ -99,8 +87,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				return coverage;
 			},
 		};
-
-		discoverTests(request.include ?? gatherTestItems(ctrl.items)).then(runTestQueue);
 	};
 
 	ctrl.refreshHandler = async () => {
@@ -108,6 +94,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	};
 
 	ctrl.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, runHandler, true, undefined, true);
+
+	ctrl.createRunProfile('Debug Tests', vscode.TestRunProfileKind.Debug, runHandler, true, undefined, true);
 
 	ctrl.resolveHandler = async item => {
 		if (!item) {
@@ -126,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		if (!e.uri.path.endsWith('.md')) {
+		if (!e.uri.path.endsWith('.pl')) {
 			return;
 		}
 
@@ -173,7 +161,7 @@ function getWorkspaceTestPatterns() {
 
 	return vscode.workspace.workspaceFolders.map(workspaceFolder => ({
 		workspaceFolder,
-		pattern: new vscode.RelativePattern(workspaceFolder, '**/*.md'),
+		pattern: new vscode.RelativePattern(workspaceFolder, '**/*.pl'),
 	}));
 }
 
@@ -183,7 +171,7 @@ async function findInitialFiles(controller: vscode.TestController, pattern: vsco
 	}
 }
 
-function startWatchingWorkspace(controller: vscode.TestController, fileChangedEmitter: vscode.EventEmitter<vscode.Uri> ) {
+function startWatchingWorkspace(controller: vscode.TestController, fileChangedEmitter: vscode.EventEmitter<vscode.Uri>) {
 	return getWorkspaceTestPatterns().map(({ workspaceFolder, pattern }) => {
 		const watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
