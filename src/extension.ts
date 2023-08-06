@@ -1,101 +1,45 @@
 import * as vscode from 'vscode';
-import { getContentFromFilesystem, testData, TestFile } from './testTree';
+import { testData, TestFile } from './testTree';
 
 export async function activate(context: vscode.ExtensionContext) {
 	const ctrl = vscode.tests.createTestController('mathTestController', 'Markdown Math');
 	context.subscriptions.push(ctrl);
 
 	const fileChangedEmitter = new vscode.EventEmitter<vscode.Uri>();
-	const runHandler = (request: vscode.TestRunRequest2, cancellation: vscode.CancellationToken) => {
-		if (!request.continuous) {
-			return startTestRun(request);
-		}
-
-		const l = fileChangedEmitter.event(uri => startTestRun(
-			new vscode.TestRunRequest2(
-				[getOrCreateFile(ctrl, uri).file],
-				undefined,
-				request.profile,
-				true
-			),
-		));
-		cancellation.onCancellationRequested(() => l.dispose());
+	const runHandler = (request: vscode.TestRunRequest) => {
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(request.include![0].uri!);
+		const program = request.include![0].uri!.fsPath;
+		const debugConfig: vscode.DebugConfiguration = {
+			name: 'Debug Test',
+			type: 'perl',
+			request: 'launch',
+			program: program,
+			debug: false,
+			cwd: workspaceFolder!.uri.fsPath
+		};
+		vscode.debug.startDebugging(workspaceFolder, debugConfig);
 	};
 
-	const debugHandler = (request: vscode.TestRunRequest2, cancellation: vscode.CancellationToken) => {
-		if (!request.continuous) {
-			return startTestRun(request);
-		}
-
-		const l = fileChangedEmitter.event(uri => startTestRun(
-			new vscode.TestRunRequest2(
-				[getOrCreateFile(ctrl, uri).file],
-				undefined,
-				request.profile,
-				true
-			),
-		));
-		cancellation.onCancellationRequested(() => l.dispose());
-	};
-
-	const startTestRun = (request: vscode.TestRunRequest) => {
-		const run = ctrl.createTestRun(request);
-		// map of file uris to statements on each line:
-		const coveredLines = new Map</* file uri */ string, (vscode.StatementCoverage | undefined)[]>();
-
-		const discoverTests = async (tests: Iterable<vscode.TestItem>) => {
-			for (const test of tests) {
-				if (request.exclude?.includes(test)) {
-					continue;
-				}
-
-				const data = testData.get(test);
-				if (data instanceof TestFile && !data.didResolve) {
-					await data.updateFromDisk(ctrl, test);
-				}
-
-				await discoverTests(gatherTestItems(test.children));
-
-				if (test.uri && !coveredLines.has(test.uri.toString())) {
-					try {
-						const lines = (await getContentFromFilesystem(test.uri)).split('\n');
-						coveredLines.set(
-							test.uri.toString(),
-							lines.map((lineText, lineNo) =>
-								lineText.trim().length ? new vscode.StatementCoverage(0, new vscode.Position(lineNo, 0)) : undefined
-							)
-						);
-					} catch {
-						// ignored
-					}
-				}
-			}
+	const debugHandler = (request: vscode.TestRunRequest) => {
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(request.include![0].uri!);
+		const program = request.include![0].uri!.fsPath;
+		const debugConfig: vscode.DebugConfiguration = {
+			name: 'Debug Test',
+			type: 'perl',
+			request: 'launch',
+			program: program,
+			cwd: workspaceFolder!.uri.fsPath
 		};
-
-		run.coverageProvider = {
-			provideFileCoverage() {
-				const coverage: vscode.FileCoverage[] = [];
-				for (const [uri, statements] of coveredLines) {
-					coverage.push(
-						vscode.FileCoverage.fromDetails(
-							vscode.Uri.parse(uri),
-							statements.filter((s): s is vscode.StatementCoverage => !!s)
-						)
-					);
-				}
-
-				return coverage;
-			},
-		};
+		vscode.debug.startDebugging(workspaceFolder, debugConfig);
 	};
 
 	ctrl.refreshHandler = async () => {
 		await Promise.all(getWorkspaceTestPatterns().map(({ pattern }) => findInitialFiles(ctrl, pattern)));
 	};
 
-	ctrl.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, runHandler, true, undefined, true);
-
-	ctrl.createRunProfile('Debug Tests', vscode.TestRunProfileKind.Debug, runHandler, true, undefined, true);
+	ctrl.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, runHandler, true);
+	
+	ctrl.createRunProfile('Debug Tests', vscode.TestRunProfileKind.Debug, debugHandler, false);
 
 	ctrl.resolveHandler = async item => {
 		if (!item) {
@@ -148,12 +92,6 @@ function getOrCreateFile(controller: vscode.TestController, uri: vscode.Uri) {
 	return { file, data };
 }
 
-function gatherTestItems(collection: vscode.TestItemCollection) {
-	const items: vscode.TestItem[] = [];
-	collection.forEach(item => items.push(item));
-	return items;
-}
-
 function getWorkspaceTestPatterns() {
 	if (!vscode.workspace.workspaceFolders) {
 		return [];
@@ -172,7 +110,7 @@ async function findInitialFiles(controller: vscode.TestController, pattern: vsco
 }
 
 function startWatchingWorkspace(controller: vscode.TestController, fileChangedEmitter: vscode.EventEmitter<vscode.Uri>) {
-	return getWorkspaceTestPatterns().map(({ workspaceFolder, pattern }) => {
+	return getWorkspaceTestPatterns().map(({ pattern }) => {
 		const watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
 		watcher.onDidCreate(uri => {
