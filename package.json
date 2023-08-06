@@ -17,7 +17,7 @@
 		"Other"
 	],
 	"activationEvents": [
-		"workspaceContains:*.md"
+		"workspaceContains:*.pl"
 	],
 	"main": "./out/extension.js",
 	"scripts": {
