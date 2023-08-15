@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
-const headingRe = /^(use)\s+(Test).*/;
+const headingRe = /^(use)\s+(Test).*;/;
+export const failedRe = /# Looks like you failed \d+ tests? of \d+\./;
 
 export const parsePerl = (text: string, events: {
 	onHeading(range: vscode.Range, name: string, depth: number): void;
