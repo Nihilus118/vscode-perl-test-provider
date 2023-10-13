@@ -2,7 +2,7 @@
 	"name": "vscode-perl-test-provider",
 	"displayName": "Perl Test Provider",
 	"description": "Automatically detect and run perl unit tests inside your current workspace",
-	"version": "0.0.1",
+	"version": "1.0.0",
 	"publisher": "Nihilus118",
 	"private": true,
 	"repository": {

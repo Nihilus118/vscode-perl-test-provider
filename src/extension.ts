@@ -11,23 +11,28 @@ export async function activate(context: vscode.ExtensionContext) {
 	const fileChangedEmitter = new vscode.EventEmitter<vscode.Uri>();
 
 	const runHandler = (request: vscode.TestRunRequest) => {
-		const fileUri = request.include![0].uri!;
-		const buffer = spawnSync(`perl`, [basename(fileUri.fsPath)], { cwd: dirname(fileUri.fsPath) });
-		if (buffer.error) {
-			console.error(`Buffer: ${buffer.error}`);
-			return;
-		}
-		const result = buffer.stderr
-			.toString()
-			.split(/\r?\n/)
-			.filter((v) => { return v !== ''; })
-			.slice(-1)[0] || '';
-		if (result.trim().match(failedRe)) {
-			// failed
-			console.log('failed');
-		} else {
-			// passed
-			console.log('passed');
+		const run = ctrl.createTestRun(request);
+		for (let i = 0; i < request.include!.length; i++) {
+			const test = request.include![i];
+			run.started(test);
+			const fileUri = request.include![0].uri!;
+			const buffer = spawnSync(`perl`, [basename(fileUri.fsPath)], { cwd: dirname(fileUri.fsPath) });
+			if (buffer.error) {
+				console.error(`Buffer: ${buffer.error}`);
+				return;
+			}
+			run.appendOutput(buffer.stdout.toString() + buffer.stderr.toString());
+			const output = buffer.stderr
+				.toString()
+				.split(/\r?\n/)
+				.filter((v) => { return v !== ''; });
+			const result = output.slice(-1)[0] || ''.trim();
+			if (result.match(failedRe)) {
+				run.failed(test, new vscode.TestMessage(output.join('\n')));
+			} else {
+				run.passed(test);
+			}
+			run.end();
 		}
 	};
 
