@@ -1,0 +1,6 @@
+.vscode/**/*
+.gitignore
+src/**/*
+**/*.js.map
+tsconfig.json
+sample
