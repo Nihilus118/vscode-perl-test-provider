@@ -1,34 +1,45 @@
 import * as vscode from 'vscode';
 import { testData, TestFile } from './testTree';
+import { failedRe } from './parser';
+import { spawnSync } from 'child_process';
+import { basename, dirname } from 'path';
 
 export async function activate(context: vscode.ExtensionContext) {
-	const ctrl = vscode.tests.createTestController('mathTestController', 'Markdown Math');
+	const ctrl = vscode.tests.createTestController('perl', 'Perl');
 	context.subscriptions.push(ctrl);
 
 	const fileChangedEmitter = new vscode.EventEmitter<vscode.Uri>();
+
 	const runHandler = (request: vscode.TestRunRequest) => {
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(request.include![0].uri!);
-		const program = request.include![0].uri!.fsPath;
-		const debugConfig: vscode.DebugConfiguration = {
-			name: 'Debug Test',
-			type: 'perl',
-			request: 'launch',
-			program: program,
-			debug: false,
-			cwd: workspaceFolder!.uri.fsPath
-		};
-		vscode.debug.startDebugging(workspaceFolder, debugConfig);
+		const fileUri = request.include![0].uri!;
+		const buffer = spawnSync(`perl`, [basename(fileUri.fsPath)], { cwd: dirname(fileUri.fsPath) });
+		if (buffer.error) {
+			console.error(`Buffer: ${buffer.error}`);
+			return;
+		}
+		const result = buffer.stderr
+			.toString()
+			.split(/\r?\n/)
+			.filter((v) => { return v !== ''; })
+			.slice(-1)[0] || '';
+		if (result.trim().match(failedRe)) {
+			// failed
+			console.log('failed');
+		} else {
+			// passed
+			console.log('passed');
+		}
 	};
 
 	const debugHandler = (request: vscode.TestRunRequest) => {
 		const workspaceFolder = vscode.workspace.getWorkspaceFolder(request.include![0].uri!);
-		const program = request.include![0].uri!.fsPath;
+		const fileUri = request.include![0].uri!;
 		const debugConfig: vscode.DebugConfiguration = {
 			name: 'Debug Test',
 			type: 'perl',
 			request: 'launch',
-			program: program,
-			cwd: workspaceFolder!.uri.fsPath
+			program: fileUri.fsPath,
+			cwd: dirname(fileUri.fsPath)
 		};
 		vscode.debug.startDebugging(workspaceFolder, debugConfig);
 	};
@@ -38,7 +49,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	};
 
 	ctrl.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, runHandler, true);
-	
+
 	ctrl.createRunProfile('Debug Tests', vscode.TestRunProfileKind.Debug, debugHandler, false);
 
 	ctrl.resolveHandler = async item => {

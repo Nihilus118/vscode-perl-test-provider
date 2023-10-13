@@ -1,17 +1,26 @@
 {
-	"name": "test-provider-sample",
-	"displayName": "test-provider-sample",
-	"description": "Sample showing how to use the test APIs",
+	"name": "vscode-perl-test-provider",
+	"displayName": "Perl Test Provider",
+	"description": "Automatically detect and run perl unit tests inside your current workspace",
 	"version": "0.0.1",
-	"publisher": "vscode-samples",
+	"publisher": "Nihilus118",
 	"private": true,
+	"repository": {
+		"type": "git",
+	    "url": "https://github.com/Nihilus118/vscode-perl-test-provider"
+	},
+	"bugs": {
+	    "url": "https://github.com/Nihilus118/vscode-perl-test-provider"
+	},
 	"license": "MIT",
-	"repository": "https://github.com/Microsoft/vscode-extension-samples",
 	"engines": {
 		"vscode": "^1.68.0"
 	},
 	"categories": [
-		"Other"
+		"Other",
+		"Testing",
+		"Debuggers",
+		"Programming Languages"
 	],
 	"activationEvents": [
 		"workspaceContains:*.pl"
