@@ -5,6 +5,7 @@
 	"version": "1.0.0",
 	"publisher": "Nihilus118",
 	"private": true,
+	"icon": "images/logo.png",
 	"repository": {
 		"type": "git",
 	    "url": "https://github.com/Nihilus118/vscode-perl-test-provider"
@@ -35,7 +36,8 @@
 		"lint": "eslint \"src/**/*.ts\"",
 		"watch": "tsc -watch -p ./",
 		"download-api": "dts main && dts dev",
-		"postinstall": "npm run download-api"
+		"postinstall": "npm run download-api",
+		"package": "vsce package"
 	},
 	"devDependencies": {
 		"@types/node": "^16.18.34",
